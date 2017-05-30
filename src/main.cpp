@@ -6,11 +6,22 @@
 
 // for convenience
 using json = nlohmann::json;
+using namespace std;
 
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+
+// Twiddle variable declarations
+const uint no_of_params  = 3 ;
+double p[no_of_params]    = {0.0, 0.0, 0.0} ;
+double dp[no_of_params]   = {1.0, 1.0, 1.0} ;
+double sum                = 0.0 ;
+double tw_err             = 0.0 ;
+double best_err           = 0.0 ;
+double tol                = 0.000001 ;
+char   twid               = 'n';
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -28,12 +39,50 @@ std::string hasData(std::string s) {
   return "";
 }
 
+//void twiddle()
+// Twiddle algorithm
+
 int main()
 {
   uWS::Hub h;
 
   PID pid;
+    
   // TODO: Initialize the pid variable.
+    
+    
+    cout << "Do you need twiddle algorithm to control? (y/n) :" << endl;
+    cin >> twid;
+    
+    // Initialize Kp, Ki and Kd
+    
+
+    p[0] = 0.3    ; // Kp
+    p[1] = 0.001  ; // Ki
+    p[2] = 4.0    ; // Kd
+    
+  
+    /*
+     if (twid == 'y')
+     {
+     p[0] = 0.0 ;
+     p[1] = 0.0 ;
+     p[2] = 0.0 ;
+     
+     dp[0] = 1.0 ;
+     dp[1] = 1.0 ;
+     dp[2] = 1.0 ;
+     }
+     else
+     {
+     p[0] = 0.3 ;
+     p[1] = 0.001;
+     p[2] = 4.0 ;
+     }
+    */
+    
+    pid.Init(p[0], p[1], p[2]);
+    
 
   h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -58,9 +107,70 @@ int main()
           * another PID controller to control the speed!
           */
           
+          pid.UpdateError(cte);
+          steer_value = -pid.TotalError();
+        
+          if (steer_value > 1.0)
+          {
+              std::cout << "Steer Value: " << steer_value << std::endl;
+              steer_value = 1.0;
+          }
+          if (steer_value < -1.0)
+          {
+              std::cout << "Steer Value: " << steer_value << std::endl;
+              steer_value = -1.0;
+          }
+        
+          int iter = 0;
+
+          if (twid == 'y')
+              
+          // Twiddle Algorithm
+                
+          {
+              sum = dp[0] + dp[1] + dp[2] ;
+              
+              while (sum > tol)
+              {
+                  for (int i = 0; i < no_of_params; i++)
+                  {
+                      p[i] += dp[i];
+                      tw_err = pid.TotalError();
+                      
+                      if (tw_err < best_err)
+                      {
+                          best_err = tw_err;
+                          dp[i]    *= 1.1;
+                      }
+                      else
+                      {
+                          p[i]   -= 2*dp[i];
+                          tw_err = pid.TotalError();
+                          
+                          if (tw_err < best_err)
+                          {
+                              best_err = tw_err;
+                              dp[i]    *= 1.1;
+                          }
+                          else
+                          {
+                              p[i]   +=dp[i];
+                              dp[i]  *= 0.9;
+                          }
+                      }
+                  }
+                  sum = dp[0] + dp[1] + dp[2] ;
+                  iter += 1;
+              }
+          }
+            
+          cout << "p[0] = " << p[0] << "  p[1] = " << p[1] << "  p[2] = " << p[2] << endl;
+            
+          cout << "Iter: " << iter << endl;
+            
           // DEBUG
           std::cout << "CTE: " << cte << " Steering Value: " << steer_value << std::endl;
-
+          
           json msgJson;
           msgJson["steering_angle"] = steer_value;
           msgJson["throttle"] = 0.3;
