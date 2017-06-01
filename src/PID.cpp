@@ -37,5 +37,3 @@ double PID::TotalError()
     //cout << "Total_error: " << total_error;
     return total_error;
 }
-
-
