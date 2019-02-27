@@ -28,6 +28,21 @@ int  buffer_size           = 20 ;
 
 //************************************ End of New Variables ***********************************************
 
+// Twiddle control global parameters
+bool twid_on = TRUE ;
+bool twid_over = FALSE ;
+
+double dp[3]    = {1.0, 1.0, 1.0} ;
+double tw_err   = 0.0 ;
+double tol      = 0.0001 ;
+double sum      = 0. ;
+double best_err = 0. ;
+int iter = 0 ;
+int twid_index = 0 ;
+bool twiddle_up = TRUE ;
+
+
+
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -47,7 +62,7 @@ std::string hasData(std::string s) {
 
 
 //***************************************** New Functions ***********************************************
-
+/*
 
 void twiddle(PID pid, double cte)
 // Twiddle algorithm
@@ -111,6 +126,64 @@ void twiddle(PID pid, double cte)
         iter += 1;
     }
 }
+
+*/
+
+void twiddle(PID pid, double cte)
+// Twiddle algorithm
+{
+    if (sum > tol)
+    {
+        int i = twid_index ;
+        if twiddle_up
+        {
+            // Twiddle Up
+            p[i] += dp[i];
+            pid.Kp = p[0];
+            pid.Ki = p[1];
+            pid.Kd = p[2];
+            pid.UpdateError(cte);
+            tw_err = abs(pid.TotalError()); // Take the absolute value of error
+            
+            if (tw_err < best_err)
+            {
+                best_err = tw_err;
+                dp[i]    *= 1.1;
+            }
+            else
+            {
+                twiddle_up = FALSE ;
+            }
+        }
+        else
+        {
+            // Twiddle Down
+            p[i]   -= 2*dp[i];
+            pid.Kp = p[0];
+            pid.Ki = p[1];
+            pid.Kd = p[2];
+            pid.UpdateError(cte);
+            tw_err = abs(pid.TotalError()); // Take the absolute value of error
+                
+            if (tw_err < best_err)
+            {
+               best_err = tw_err;
+               dp[i]    *= 1.1;
+            }
+            else
+            {
+               p[i]   +=dp[i];
+               dp[i]  *= 0.9;
+            }
+        }
+        twiddle_up = TRUE ;
+        twid_index /= 3 ; // Modulo operation to reset the index
+        sum = dp[0] + dp[1] + dp[2] ;
+        iter += 1;
+    }
+}
+
+
 
 // Discrete sprrd control function to modulate the speed based on the streeing value
 
@@ -216,25 +289,29 @@ int main()
 
   PID pid;
     
-  // TODO: Initialize the pid variable.
-    
   // Initialize Kp, Ki and Kd for non-twiddle case
-    
-  p[0] = 0.3    ; // Kp
-  p[1] = 0.001  ; // Ki
-  p[2] = 4.0    ; // Kd
-    
-  pid.Init(p[0], p[1], p[2]);
 
-  /*
-  previous_steer = new double[buffer_size];
-    
-  for (int i=0; i < buffer_size; i++)
+  if twid_on
   {
-    previous_steer[i] = 0;    // Initialize all elements to zero.
+      sum      = dp[0] + dp[1] + dp[2] ;
+      best_err = abs(pid.TotalError()); // Take the absolute value of error
+      
+      p[0] = 0.0    ; // Kp
+      p[1] = 0.0    ; // Ki
+      p[2] = 0.0    ; // Kd
+      
+      pid.Init(p[0], p[1], p[2]);
   }
-   
-  */
+  else
+  {
+      p[0] = 0.3    ; // Kp
+      p[1] = 0.001  ; // Ki
+      p[2] = 4.0    ; // Kd
+      
+      pid.Init(p[0], p[1], p[2]);
+      
+  }
+
 
   h.onMessage([&pid](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
